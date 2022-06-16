@@ -17,29 +17,13 @@ headers = {
 name = "github"
 
 
-api_url = f"https://api.github.com/search/code?q=user:{name}+extension:py&per_page=100"
+api_url = f"https://api.github.com/search/repositories?q=language:python+stars:%3E=30+forks:%3E=30&page=1&per_page=1"
 
-#send get request
-response = requests.get(api_url,auth=(user,token))
+response = requests.get(api_url)
 
-#get the json data
-data =  response.json()
+data = response.json()
+urls = data["total_count"]
+names = data["incomplete_results"]
 
-for repository in data["items"]:
-    name = repository["html_url"]
-    
-    table2.add_row([name])
-
-    
-print(table2)
-
-rl = requests.get("https://api.github.com/rate_limit", auth=(user,token))
-
-data2 = rl.json()
-
-print(data2)
-print(data["total_count"])
-
-
-
-    
+print(urls)
+print(names)
