@@ -13,6 +13,8 @@ headers = {
     "Accept": "application/vnd.github.v3+json",
     "Authorization": authorization,
 }
+
+
 i = 1
 
 langs = "python"
@@ -22,7 +24,7 @@ forks = 200
 api_url = "https://api.github.com/search/repositories?q=language:python+stars:%3E=100000+forks:%3E=30&page=1&per_page=10"
 
 # send get request
-response = requests.get(api_url)
+response = requests.get(api_url, auth=(user, token))
 
 # get the json data
 data = response.json()
