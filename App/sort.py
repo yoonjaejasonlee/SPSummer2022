@@ -4,6 +4,7 @@ import requests
 import time
 import mariadb
 import sys
+import threading
 from git.repo.base import Repo
 
 # -----------------------------------------------------
@@ -73,36 +74,39 @@ CC_min = 0
 CC_max = 0
 total_lines = 0
 lines = 0
-j = 1
-queue_count = 0
+total_files = 0
+j = 3
 
 start_time = time.time()
 
-url = 1
+user = 'yoonjaejasonlee'
+token = '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'
 
-while url is not None:
 
-    api_url = f"https://api.github.com/search/repositories?q=language:python+stars:>=170+forks:>=20&page={j}&per_page" \
-              f"=100 "
+def queuing(page_num):
+    if page_num <= 7:
+        api_url = f"https://api.github.com/search/repositories?q=language:python+stars:%3E=150+forks:%3E=20&page={page_num}&per_page=100"
 
-    response = requests.get(api_url)
+        response = requests.get(api_url, auth=(user, token))
 
-    response_data = response.json()
+        response_data = response.json()
 
-    for s in response_data["items"]:
-        url = s["url"]
-        queue_size += 1
-        queue.enqueue(url)
-        j += 1
+        for s in response_data["items"]:
+            urls = s["url"]
+            queue.enqueue(urls)
+        print("Queue Size: ", len(queue.queue))
+    else:
+        print("nothing to queue")
 
-    print("Queue Size: ", queue_size)
 
-    while not queue.isEmpty():
+def analyze(cc_avg, cc_min, cc_max, total_line, file_count, counter, page_num, line, total_file):
+    queuing(page_num)
+    if not queue.isEmpty():
         url = queue.peek()
         queue.dequeue()
 
         api = url
-        api_response = requests.get(api)
+        api_response = requests.get(api, auth=(user, token))
         api_response_data = api_response.json()
 
         user_name = api_response_data["owner"]["login"]
@@ -112,7 +116,6 @@ while url is not None:
         temp_location = f"C:/Users/yoonj/Desktop/project-3-s22-yoonjaejasonlee-main/testing/{user_name}/{repo_name}"
 
         Repo.clone_from(hub, temp_location)
-
 
         def search(directory):
             try:
@@ -128,45 +131,48 @@ while url is not None:
             except PermissionError:
                 pass
 
-
         search(temp_location)
 
-        while i < len(list_search):
-            code = lizard.analyze_file(list_search[i])
-            py_count += 1
-            total_count += 1
-            CC = code.CCN
-            CC_min = min(CC, CC_min)
-            CC_max = max(CC, CC_max)
-            lines += code.nloc
-            CC_avg += CC
-            total_lines += code.nloc
-            i += 1
+        page_num += 1
+        while counter <= len(list_search):
+            code = lizard.analyze_file(list_search[counter])
+            file_count += 1
+            cc = code.CCN
+            cc_min = min(cc, cc_min)
+            cc_max = max(cc, cc_max)
+            line += code.nloc
+            cc_avg += cc
+            total_line += code.nloc
+            counter += 1
+            total_file += file_count
 
-        if i == len(list_search):
+        if counter == len(list_search):
 
-            CC_avg = CC_avg / len(list_search)
+            cc_avg = cc_avg / len(list_search)
             insert_query = "INSERT INTO analyze_results (user_name,repo_name, num_files, min_CCN, max_CCN, average_CCN, repo_LOC, cumulative_LOC) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
 
             try:
-                cur.execute(insert_query, (user_name, repo_name, py_count, CC_min, CC_max, CC_avg, lines, total_lines))
-            except mariadb.Error as e:
-                print(f"Error: {e}")
+                cur.execute(insert_query, (user_name, repo_name, file_count, cc_min, cc_max, cc_avg, line, total_line))
+            except mariadb.Error as es:
+                print(f"Error: {es}")
 
             conn.commit()
 
             print(f"REPO: {user_name}/{repo_name} Successfully Added to the DB")
+            cc_avg = 0
+            file_count = 0
+            cc_min = 0
+            cc_max = 0
+            line = 0
+        analyze(cc_avg, cc_min, cc_max, total_line, file_count, counter, page_num, line, total_file)
 
-            CC_avg = 0
-            py_count = 0
-            CC_min = 0
-            CC_max = 0
-            lines = 0
 
-        queue_size -= 1
+if __name__ == "__main__":
 
-end_time = time.time()
+    analyze(CC_avg, CC_min, CC_max, total_lines, py_count, i, j, lines, total_files)
 
-print(f"Total time cost: {end_time - start_time}")
-print(f"Number of files: {total_count}")
-print(f"time cost per file: {(end_time - start_time) / total_count}\n")
+    end_time = time.time()
+
+    print(f"Total time cost: {end_time - start_time}")
+    print(f"total files: {total_files}")
+    print(f"Average time cost per file: {(start_time-end_time)/total_files}")
