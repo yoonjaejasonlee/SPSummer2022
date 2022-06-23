@@ -4,10 +4,8 @@ import requests
 import time
 import mariadb
 import sys
-import threading
-from git.repo.base import Repo
 
-# -----------------------------------------------------
+from git.repo.base import Repo
 
 # --------------DB 연결-----------------------------------
 try:
@@ -24,8 +22,6 @@ except mariadb.Error as e:
 
 cur = conn.cursor()
 
-
-# ------------------------------------------------------------
 
 # -------------------CLASS FOR QUEUE---------------------------------------
 class Queue:
@@ -75,7 +71,7 @@ CC_max = 0
 total_lines = 0
 lines = 0
 total_files = 0
-j = 3
+j = 1
 
 start_time = time.time()
 
@@ -83,39 +79,36 @@ user = 'yoonjaejasonlee'
 token = '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'
 
 
+# -----------------------------------------------------------------------
 def queuing(page_num):
-    if page_num <= 7:
-        api_url = f"https://api.github.com/search/repositories?q=language:python+stars:%3E=150+forks:%3E=20&page={page_num}&per_page=100"
+    if page_num <= 2:
+        url = f"http://127.0.0.1:5000/repos/{page_num}"
 
-        response = requests.get(api_url, auth=(user, token))
+        response = requests.get(url)
 
         response_data = response.json()
 
-        for s in response_data["items"]:
-            urls = s["url"]
-            queue.enqueue(urls)
+        for s in response_data:
+            queue.enqueue(s)
+
         print("Queue Size: ", len(queue.queue))
     else:
         print("nothing to queue")
 
 
+# -----------------------------------------------------------------------
 def analyze(cc_avg, cc_min, cc_max, total_line, file_count, counter, page_num, line, total_file):
     queuing(page_num)
     if not queue.isEmpty():
         url = queue.peek()
         queue.dequeue()
 
-        api = url
-        api_response = requests.get(api, auth=(user, token))
-        api_response_data = api_response.json()
+        user_name = url.rsplit('/', 2)[1]
+        repo_name = url.rsplit('/', 1)[-1]
 
-        user_name = api_response_data["owner"]["login"]
-        repo_name = api_response_data["name"]
-
-        hub = f"https://github.com/{user_name}/{repo_name}"
         temp_location = f"C:/Users/yoonj/Desktop/project-3-s22-yoonjaejasonlee-main/testing/{user_name}/{repo_name}"
 
-        Repo.clone_from(hub, temp_location)
+        Repo.clone_from(url, temp_location)
 
         def search(directory):
             try:
@@ -134,8 +127,9 @@ def analyze(cc_avg, cc_min, cc_max, total_line, file_count, counter, page_num, l
         search(temp_location)
 
         page_num += 1
-        while counter <= len(list_search):
+        while counter < len(list_search):
             code = lizard.analyze_file(list_search[counter])
+            total_file += 1
             file_count += 1
             cc = code.CCN
             cc_min = min(cc, cc_min)
@@ -144,7 +138,6 @@ def analyze(cc_avg, cc_min, cc_max, total_line, file_count, counter, page_num, l
             cc_avg += cc
             total_line += code.nloc
             counter += 1
-            total_file += file_count
 
         if counter == len(list_search):
 
@@ -168,11 +161,9 @@ def analyze(cc_avg, cc_min, cc_max, total_line, file_count, counter, page_num, l
 
 
 if __name__ == "__main__":
-
     analyze(CC_avg, CC_min, CC_max, total_lines, py_count, i, j, lines, total_files)
 
     end_time = time.time()
-
     print(f"Total time cost: {end_time - start_time}")
     print(f"total files: {total_files}")
-    print(f"Average time cost per file: {(start_time-end_time)/total_files}")
+    print(f"Average time cost per file: {total_files / (start_time - end_time)}")
