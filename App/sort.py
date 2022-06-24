@@ -129,7 +129,6 @@ def analyze(cc_avg, cc_min, cc_max, total_line, file_count, counter, page_num, l
         page_num += 1
         while counter < len(list_search):
             code = lizard.analyze_file(list_search[counter])
-            total_file += 1
             file_count += 1
             cc = code.CCN
             cc_min = min(cc, cc_min)
@@ -165,5 +164,3 @@ if __name__ == "__main__":
 
     end_time = time.time()
     print(f"Total time cost: {end_time - start_time}")
-    print(f"total files: {total_files}")
-    print(f"Average time cost per file: {total_files / (start_time - end_time)}")
