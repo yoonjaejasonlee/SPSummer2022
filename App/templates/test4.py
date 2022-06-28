@@ -71,7 +71,7 @@ engine = sqlalchemy.create_engine(URL, echo=False)
 
 
 def queuing(page_num):
-    if page_num <= 2:
+    if page_num <= 12:
         url = f"http://127.0.0.1:5000/repos/{page_num}"
 
         response = requests.get(url)
@@ -137,46 +137,82 @@ def ast_visit(node, indentlevel=0, maxes=0, call_cnt=0, param=0):
     return maxes, call_cnt, param
 
 
-def calc_complexity(path):
-    path = path + "**/*.py"
-    files = glob.glob(path, recursive=True)
+def goes_through(page_num, counter):
+    queuing(page_num)
+    if not queue.isEmpty():
+        url = queue.peek()
+        queue.dequeue()
+
+        user_name = url.rsplit('/', 2)[1]
+        repo_name = url.rsplit('/', 1)[-1]
+
+        temp_location = f"C:/Users/yoonj/Desktop/project-3-s22-yoonjaejasonlee-main/testing/{user_name}/{repo_name}"
+
+        Repo.clone_from(url, temp_location)
+        calc_complexity(temp_location, counter, page_num)
+    goes_through(page_num, counter)
+
+
+def calc_complexity(path, counter, page_num):
+    def search(directory):
+        try:
+            filenames = os.listdir(directory)
+            for filename in filenames:
+                full_filename = os.path.join(directory, filename)
+                if os.path.isdir(full_filename):
+                    search(full_filename)
+                else:
+                    ext = os.path.splitext(full_filename)[-1]
+                    if ext == '.py':
+                        list_search.append(full_filename)
+        except PermissionError:
+            pass
+
+    search(path)
+
+    page_num += 1
+    # path = path + "**/*.py"
+    # files = glob.glob(path, recursive=True)
     name = ""
     code = ""
     name_n_code = {}
     df = pd.DataFrame(
         columns=["file_name", "file_dir", "m_mutual_cnt", "nloc", "loc", "CCN", "func_token", "max_indent",
                  "func_param", "call_cnt"])
-    for i in files:
-        code_name = i.split("\\")
-        name = code_name[len(code_name) - 1]
-        if name != "__init__.py":
-            name = name.replace(".py", "")
-            try:
-                parsed_file = astor.parse_file(i)
-                max_indent, func_call, param = ast_visit(parsed_file)
-            except:
-                continue
-            f = open(i, "r", encoding="UTF-8")
-            mlb = lizard.analyze_file(i)
-            p = f.read()
-            dir_name = i.replace(os.getcwd(), '')
-            nloc = mlb.nloc
-            loc = len(p.split('\n'))
-            CCN = mlb.CCN
-            func_token = mlb.token_count
-            parsed_file = ""
-            df.loc[len(df)] = [name, dir_name, 0, nloc, loc, CCN, func_token, max_indent, param, func_call]
-            name_n_code[dir_name] = parse_imports(p)
-            f.close()
-    name_n_code = find_local_import(name_n_code, df)
-    df['m_mutual_cnt'] = name_n_code.values()
-    df.to_sql(name='complexities', con=engine, if_exists='append', index=False)
-    return df
+    while counter < len(list_search):
+        for i in list_search:
+            code_name = i.split("\\")
+            name = code_name[len(code_name) - 1]
+            if name != "__init__.py":
+                name = name.replace(".py", "")
+                try:
+                    parsed_file = astor.parse_file(i)
+                    max_indent, func_call, param = ast_visit(parsed_file)
+                except:
+                    continue
+                f = open(i, "r", encoding="UTF-8")
+                mlb = lizard.analyze_file(i)
+                p = f.read()
+                dir_name = i.replace(os.getcwd(), '')
+                nloc = mlb.nloc
+                loc = len(p.split('\n'))
+                CCN = mlb.CCN
+                func_token = mlb.token_count
+                parsed_file = ""
+                df.loc[len(df)] = [name, dir_name, 0, nloc, loc, CCN, func_token, max_indent, param, func_call]
+                name_n_code[dir_name] = parse_imports(p)
+                f.close()
+                name_n_code = find_local_import(name_n_code, df)
+                df['m_mutual_cnt'] = name_n_code.values()
+                df.to_sql(name='complexities', con=engine, if_exists='append', index=False)
+
+
 
 
 if __name__ == "__main__":
     time_start = time.time()
-    complexity_calc.calc_complexity(
-        path=r"C:/Users/yoonj/Desktop/project-3-s22-yoonjaejasonlee-main/testing/public-apis/")
+    goes_through(12, 0)
+    # df2 = complexity_calc.calc_complexity(
+    #     path=r"C:/Users/yoonj/Desktop/project-3-s22-yoonjaejasonlee-main/testing/tensorflow/")
     time_end = time.time()
     print(time_end - time_start)

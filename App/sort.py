@@ -81,7 +81,7 @@ token = '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'
 
 # -----------------------------------------------------------------------
 def queuing(page_num):
-    if page_num <= 2:
+    if page_num <= 1:
         url = f"http://127.0.0.1:5000/repos/{page_num}"
 
         response = requests.get(url)
@@ -102,7 +102,7 @@ def analyze(cc_avg, cc_min, cc_max, total_line, file_count, counter, page_num, l
     if not queue.isEmpty():
         url = queue.peek()
         queue.dequeue()
-
+        print(queue.queue)
         user_name = url.rsplit('/', 2)[1]
         repo_name = url.rsplit('/', 1)[-1]
 
