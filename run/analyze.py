@@ -7,12 +7,11 @@ import ast
 import astor
 import sqlalchemy.engine
 import requests
-import complexity_calc
+import shutil
 import time
 import pymysql
 from git.repo.base import Repo
-
-
+from datetime import datetime
 
 pymysql.install_as_MySQLdb()
 
@@ -73,8 +72,8 @@ engine = sqlalchemy.create_engine(URL, echo=False)
 
 
 def queuing(page_num):
-    if page_num <= 3:
-        url = f"http://127.0.0.1:5000/repos/{page_num}"
+    if page_num <= 2:
+        url = f"http://sparrow-ml.fasoo.com:24443/repos/{page_num}"
 
         response = requests.get(url)
 
@@ -139,7 +138,7 @@ def ast_visit(node, indentlevel=0, maxes=0, call_cnt=0, param=0):
     return maxes, call_cnt, param
 
 
-def goes_through(page_num, counter):
+def goes_through(page_num):
     queuing(page_num)
     if not queue.isEmpty():
         url = queue.peek()
@@ -147,16 +146,17 @@ def goes_through(page_num, counter):
         user_name = url.rsplit('/', 2)[1]
         repo_name = url.rsplit('/', 1)[-1]
 
-        temp_location = f"C:/Users/yoonj/Desktop/project-3-s22-yoonjaejasonlee-main/testing/{user_name}/{repo_name}/"
+        temp_location = f"testing/{user_name}/{repo_name}/"
         try:
             Repo.clone_from(url, temp_location)
         except:
             page_num += 1
-            goes_through(page_num, counter)
+            goes_through(page_num)
         page_num += 1
         df = calc_complexity(temp_location)
         get_average(df, url)
-        goes_through(page_num, counter)
+        shutil.rmtree(f"testing/{user_name}")
+        goes_through(page_num)
 
 
 def calc_complexity(path):
@@ -178,10 +178,7 @@ def calc_complexity(path):
                 max_indent, func_call, param = ast_visit(parsed_file)
             except:
                 continue
-            try:
-                f = open(i, "r", encoding='ISO-8859-1')
-            except:
-                continue
+            f = open(i, "r", encoding='ISO-8859-1', errors='ignore')
             mlb = lizard.analyze_file(i)
             p = f.read()
             dir_name = i.replace(os.getcwd(), '')
@@ -204,9 +201,10 @@ def get_average(dataframe, path):
     user_name = path.rsplit('/', 2)[1]
     repo_name = path.rsplit('/', 1)[-1]
     df2 = pd.DataFrame(
-        columns=["URL", "User_name", "Repo_name", "Total_File_Num", "Avg_Mutual_CNT", "Avg_nloc", "Total_LOC", "Avg_CCN",
+        columns=["Time", "URL", "User_name", "Repo_name", "Total_File_Num", "Avg_Mutual_CNT", "Avg_nloc", "Total_LOC",
+                 "Avg_CCN",
                  "Max_CCN",
-                 "Min_CCN", "Avg_func_token", "Avg_Max_indent", "Avg_func_param", "Avg_call_cnt"]
+                 "Min_CCN", "Avg_func_token", "Max_indent", "Max_func_param", "Max_call_cnt"]
     )
     avg_mutual = dataframe['m_mutual_cnt'].mean()
     avg_nloc = dataframe['nloc'].mean()
@@ -214,21 +212,24 @@ def get_average(dataframe, path):
     avg_ccn = dataframe['CCN'].mean()
     max_ccn = dataframe['CCN'].max()
     min_ccn = dataframe['CCN'].min()
-    avg_indent = dataframe['max_indent'].mean()
-    avg_param = dataframe['func_param'].mean()
+    max_indent = dataframe['max_indent'].max()
+    max_param = dataframe['func_param'].max()
     avg_token = dataframe['func_token'].mean()
-    avg_call_cnt = dataframe['call_cnt'].mean()
+    max_call_cnt = dataframe['call_cnt'].max()
     row_num = dataframe.shape[0]
-    df2.loc[len(df2)] = [path, user_name, repo_name, row_num, avg_mutual, avg_nloc, total_loc, avg_ccn,
-                                                   max_ccn, min_ccn,
-                                                   avg_token, avg_indent, avg_param, avg_call_cnt]
-
-    df2.to_sql(name='complexities', con=engine, if_exists='append', index=False)
-    print(f"{user_name}/{repo_name} has been added to DB...... Updated Queue Size : {queue_size} ")
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    df2.loc[len(df2)] = [timestamp, path, user_name, repo_name, row_num, avg_mutual, avg_nloc, total_loc, avg_ccn,
+                         max_ccn, min_ccn,
+                         avg_token, max_indent, max_param, max_call_cnt]
+    if total_loc != 0:
+        df2.to_sql(name='complexities', con=engine, if_exists='append', index=False)
+        print(f"{user_name}/{repo_name} has been added to DB...... Updated Queue Size : {len(queue.queue)} ")
+    else:
+        print(f"Cannot fetch any files from {user_name}/{repo_name}..... Updated Queue Size : {len(queue.queue)}")
 
 
 if __name__ == "__main__":
     time_start = time.time()
-    goes_through(2, asa)
+    goes_through(1)
     time_end = time.time()
     print(time_end - time_start)

@@ -1,218 +1,168 @@
-import glob
-import re
 import pandas as pd
-import lizard
-import os
-import ast
-import astor
-import sqlalchemy.engine
+import urllib.request
+import mariadb
 import requests
-import complexity_calc
 import time
-import pymysql
-from git.repo.base import Repo
-
-pymysql.install_as_MySQLdb()
-
-queue_size = 0
-list_search = []
-i = 0
-py_count = 0
-total_count = 0
-CC_avg = 0
-CC_min = 0
-CC_max = 0
-total_lines = 0
-lines = 0
-total_files = 0
-j = 1
+import sys
+from pandas import *
+from flask import Flask, jsonify, request
+from pandas.tseries.offsets import MonthEnd
 
 
-# -------------------CLASS FOR QUEUE---------------------------------------
-class Queue:
-    def __init__(self):
-        self.queue = []
+user = 'yewonhong'
+token = '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'  # 3months exp
 
-    def enqueue(self, data):
-        self.queue.append(data)
+conn = None
+cursor = None
 
-    def dequeue(self):
-        dequeue_object = None
-        if self.isEmpty():
-            print("Queue is Empty\n")
-        else:
-            dequeue_object = self.queue[0]
-            self.queue = self.queue[1:]
+try:
+    conn = mariadb.connect(
+        user='root',
+        password='a1234567!',
+        host='sparrow-ml.fasoo.com',
+        port=30198,
+        db='Crawler',
+    )
+    cursor = conn.cursor()
 
-        return dequeue_object
+except mariadb.Error as e:
 
-    def peek(self):
-        peek_object = None
-        if self.isEmpty():
-            print("Queue is Empty")
-        else:
-            peek_object = self.queue[0]
+    print(f"Error connecting to MariaDB: {e}")
+    sys.exit(1)
 
-        return peek_object
-
-    def isEmpty(self):
-        is_empty = False
-        if len(self.queue) == 0:
-            is_empty = True
-        return is_empty
+app = Flask(__name__)
+lists = []
 
 
-# --------------------------------------------------------------------
+# with app.app_context():
+#     cursor = mariadb.connection.cursor()
+
+@app.route('/request', methods=['POST'])
+def actor_to_crawler():
+    a = request.form.get('language')
+    b = request.form.get('forks')
+    c = request.form.get('stars')
+
+    return jsonify({"language": a, "forks": b, "stars": c})
 
 
-queue = Queue()
-URL = 'mysql+mysqlconnector://root:a1234567!@sparrow-ml.fasoo.com:30198/Analyzer'
-engine = sqlalchemy.create_engine(URL, echo=False)
+@app.route("/repos/<string:s>", methods=['GET'])
+def crawler_to_analyzer(s):
+    lists.clear()
+    url = get_url(lang)
+    final_url = url + 'page={s}'
+    res = requests.get(final_url, auth=(user, token))
+    repos = res.json()
+
+    for s in repos["items"]:
+        url = s["html_url"]
+        lists.append(url)
+
+    print(lists)
+    return jsonify(lists)
 
 
-def queuing(page_num):
-    if page_num <= 12:
-        url = f"http://127.0.0.1:5000/repos/{page_num}"
+def request_crawl(url):
+    request = urllib.request.Request(url)
+    response = urllib.request.urlopen(request)
+    rescode = response.getcode()
 
-        response = requests.get(url)
+    # ________________________delete later__________________________
+    tot_repos = requests.get(url, auth=(user, token)).json()
+    total = tot_repos["total_count"]
+    print('Total count of repos:', total)
+    start = time.time()
+    # global final_url
+    # ________________________delete later__________________________
 
-        response_data = response.json()
+    i = 1
+    while i <= 10:
 
-        for s in response_data:
-            queue.enqueue(s)
+        final_url = url + 'page={}'.format(i)
+        res = requests.get(final_url, auth=(user, token))
+        repos = res.json()
 
-        print("Queue Size: ", len(queue.queue))
-    else:
-        print("nothing to queue")
-
-
-# -----------------Analyze----------------------------------
-
-def parse_imports(text):
-    temp = []
-    text = text.split("\n")
-    for i in text:
-        if re.match(r'^.*import .+$', i):
-            temp.append(i.strip().split(" ")[1].split('.')[0])
-    return temp
-
-
-def find_local_import(obj, df):
-    for key, value in obj.items():
-        count = 0
-        for i in value:
-            if i in df['file_name'].to_list():
-                count += 1
-        obj[key] = count
-    return obj
-
-
-indentIncreaseNodes = (ast.FunctionDef, ast.ClassDef, ast.If, ast.For, ast.While, ast.With)
-
-
-def ast_visit(node, indentlevel=0, maxes=0, call_cnt=0, param=0):
-    if maxes < indentlevel:
-        maxes = indentlevel
-    for field, value in ast.iter_fields(node):
-        if isinstance(value, list):
-            for item in value:
-                if isinstance(item, ast.AST):
-                    if isinstance(item, indentIncreaseNodes):
-                        if isinstance(item, ast.FunctionDef):
-                            param += len(item.args.args)
-                        maxes, call_cnt, param = ast_visit(item, indentlevel=indentlevel + 1, maxes=maxes,
-                                                           call_cnt=call_cnt,
-                                                           param=param)
-                    elif isinstance(item, ast.Call):
-                        maxes, call_cnt, param = ast_visit(item, indentlevel=indentlevel, maxes=maxes,
-                                                           call_cnt=call_cnt + 1,
-                                                           param=param)
-                    else:
-                        maxes, call_cnt, param = ast_visit(item, indentlevel=indentlevel, maxes=maxes,
-                                                           call_cnt=call_cnt,
-                                                           param=param)
-        elif isinstance(value, ast.AST):
-            maxes, call_cnt, param = ast_visit(value, indentlevel=indentlevel, maxes=maxes, call_cnt=call_cnt,
-                                               param=param)
-    return maxes, call_cnt, param
-
-
-def goes_through(page_num, counter):
-    queuing(page_num)
-    if not queue.isEmpty():
-        url = queue.peek()
-        queue.dequeue()
-
-        user_name = url.rsplit('/', 2)[1]
-        repo_name = url.rsplit('/', 1)[-1]
-
-        temp_location = f"C:/Users/yoonj/Desktop/project-3-s22-yoonjaejasonlee-main/testing/{user_name}/{repo_name}"
-
-        Repo.clone_from(url, temp_location)
-        calc_complexity(temp_location, counter, page_num)
-    goes_through(page_num, counter)
-
-
-def calc_complexity(path, counter, page_num):
-    def search(directory):
-        try:
-            filenames = os.listdir(directory)
-            for filename in filenames:
-                full_filename = os.path.join(directory, filename)
-                if os.path.isdir(full_filename):
-                    search(full_filename)
-                else:
-                    ext = os.path.splitext(full_filename)[-1]
-                    if ext == '.py':
-                        list_search.append(full_filename)
-        except PermissionError:
-            pass
-
-    search(path)
-
-    page_num += 1
-    # path = path + "**/*.py"
-    # files = glob.glob(path, recursive=True)
-    name = ""
-    code = ""
-    name_n_code = {}
-    df = pd.DataFrame(
-        columns=["file_name", "file_dir", "m_mutual_cnt", "nloc", "loc", "CCN", "func_token", "max_indent",
-                 "func_param", "call_cnt"])
-    while counter < len(list_search):
-        for i in list_search:
-            code_name = i.split("\\")
-            name = code_name[len(code_name) - 1]
-            if name != "__init__.py":
-                name = name.replace(".py", "")
+        if (rescode == 200):
+            repos.get('items', 'error')
+            for j in repos['items']:
                 try:
-                    parsed_file = astor.parse_file(i)
-                    max_indent, func_call, param = ast_visit(parsed_file)
-                except:
-                    continue
-                f = open(i, "r", encoding="UTF-8")
-                mlb = lizard.analyze_file(i)
-                p = f.read()
-                dir_name = i.replace(os.getcwd(), '')
-                nloc = mlb.nloc
-                loc = len(p.split('\n'))
-                CCN = mlb.CCN
-                func_token = mlb.token_count
-                parsed_file = ""
-                df.loc[len(df)] = [name, dir_name, 0, nloc, loc, CCN, func_token, max_indent, param, func_call]
-                name_n_code[dir_name] = parse_imports(p)
-                f.close()
-                name_n_code = find_local_import(name_n_code, df)
-                df['m_mutual_cnt'] = name_n_code.values()
-                df.to_sql(name='complexities', con=engine, if_exists='append', index=False)
+                    res_data = j['html_url']
+                    lists.append(res_data)
+                    cursor.execute(f"INSERT IGNORE INTO repos VALUES(\"{res_data}\")")
+                    conn.commit()
+                    # Request API (Crawler <-> Analyzer)
+                    i += 1
+
+                except KeyError:
+                    print("error")
+                    i
+            print(lists)
+
+            # ________________________delete later__________________________
+            end = time.time()
+            print('response time: ', end - start, '\n')
+            # ________________________delete later__________________________
+
+        else:
+            print("Error code: " + rescode)
 
 
+def get_url(lang):
+    def set_stars(stars_d=50):
+
+        stars = int(input("Set the minimum number of stars (default & minimum is 50): "))
+
+        if stars >= 50:
+            print('The {} is set as stars.'.format(stars))
+            return stars
+        else:
+            print('The default value 50 is set.')
+            return stars_d
+
+    def set_forks(forks_d=5):
+
+        forks = int(input("Set the minimum number of forks (default & minimum is 5): "))
+
+        if forks >= 5:
+            print('The {} is set as forks.'.format(forks))
+            return forks
+        else:
+            print('The default value 5 is set.')
+            return forks_d
+
+    stars = set_stars()
+    forks = set_forks()
+
+    if (lang == "py"):
+
+        today = pd.datetime.now().date()  # will be removed from pandas in a future ver
+        for beg in pd.date_range(end=today, periods=100, freq='MS')[::-1]:
+            dt = beg.strftime("%Y-%m-%d") + '..' + (beg + MonthEnd(1)).strftime("%Y-%m-%d")
+            url = f'https://api.github.com/search/repositories?q=stars:>{stars}+forks:>{forks}+language:python+created:{dt}+&order=desc&per_page=100&'
+            print(dt)  # delete later
+            request_crawl(url)
 
 
-if __name__ == "__main__":
-    time_start = time.time()
-    goes_through(12, 0)
-    # df2 = complexity_calc.calc_complexity(
-    #     path=r"C:/Users/yoonj/Desktop/project-3-s22-yoonjaejasonlee-main/testing/tensorflow/")
-    time_end = time.time()
-    print(time_end - time_start)
+    elif (lang == "js"):
+
+        today = pd.datetime.now().date()  # will be removed from pandas in a future ver
+        for beg in pd.date_range(end=today, periods=100, freq='MS')[::-1]:
+            dt = beg.strftime("%Y-%m-%d") + '..' + (beg + MonthEnd(1)).strftime("%Y-%m-%d")
+            url = 'https://api.github.com/search/repositories?q=stars:>{}+forks:>{}+language:javascript+created:{}+&order=desc&per_page=100&'.format(
+                stars, forks, dt)
+            print(dt)  # delete later
+            request_crawl(url)
+
+
+lang = input("Choose the programming language (python/nodejs): ")
+# lang = request.get(f"https://api.github.com/search/repositories/{}/{}/languages").json().keys()
+if lang == "py":
+    print(get_url(lang))
+
+elif lang == "js":
+    print(get_url(lang))
+
+else:
+    print("Retype the programming language.")
+
+actor_to_crawler()

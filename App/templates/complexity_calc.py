@@ -140,6 +140,7 @@ def ast_visit(node, indentlevel=0, maxes=0, call_cnt=0, param=0):
 def calc_complexity(path):
     path = path + "**/*.py"
     files = glob.glob(path, recursive=True)
+    print(files)
     name = ""
     code = ""
     name_n_code = {}
@@ -170,13 +171,12 @@ def calc_complexity(path):
             f.close()
     name_n_code = find_local_import(name_n_code, df)
     df['m_mutual_cnt'] = name_n_code.values()
-    df.to_sql(name='complexities', con=engine, if_exists='append', index=False)
+    df.to_sql(name='abc', con=engine, if_exists='append', index=False)
     return df
 
 
 if __name__ == "__main__":
-    time_start = time.time()
-    complexity_calc.calc_complexity(
-        path=r"C:/Users/yoonj/Desktop/project-3-s22-yoonjaejasonlee-main/testing/public-apis/")
-    time_end = time.time()
-    print(time_end - time_start)
+    calc_complexity(path=r"C:\Users\yoonj\Desktop\project\public-apis")
+
+
+
