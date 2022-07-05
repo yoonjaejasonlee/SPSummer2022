@@ -71,21 +71,13 @@ URL = 'mysql+mysqlconnector://root:a1234567!@sparrow-ml.fasoo.com:30198/Analyzer
 engine = sqlalchemy.create_engine(URL, echo=False)
 
 
-def queuing(page_num):
-    if page_num <= 2:
-        url = f"http://sparrow-ml.fasoo.com:24443/repos/{page_num}"
-
-        response = requests.get(url)
-
-        response_data = response.json()
-
-        for s in response_data:
-            queue.enqueue(s)
-
+def queuing(lists):
+    for s in lists:
+        queue.enqueue(s)
         print("Queue Size: ", len(queue.queue))
     else:
         print("nothing to queue")
-
+    goes_through()
 
 # -----------------Analyze----------------------------------
 
@@ -138,25 +130,18 @@ def ast_visit(node, indentlevel=0, maxes=0, call_cnt=0, param=0):
     return maxes, call_cnt, param
 
 
-def goes_through(page_num):
-    queuing(page_num)
-    if not queue.isEmpty():
+def goes_through():
+    while not queue.isEmpty():
         url = queue.peek()
         queue.dequeue()
         user_name = url.rsplit('/', 2)[1]
         repo_name = url.rsplit('/', 1)[-1]
 
-        temp_location = f"testing/{user_name}/{repo_name}/"
-        try:
-            Repo.clone_from(url, temp_location)
-        except:
-            page_num += 1
-            goes_through(page_num)
-        page_num += 1
+        temp_location = f"C:/Users/yoonj/Desktop/project-3-s22-yoonjaejasonlee-main/testing/{user_name}/{repo_name}/"
+        Repo.clone_from(url, temp_location)
         df = calc_complexity(temp_location)
         get_average(df, url)
-        shutil.rmtree(f"testing/{user_name}")
-        goes_through(page_num)
+        #shutil.rmtree(f"C:/Users/yoonj/Desktop/project-3-s22-yoonjaejasonlee-main/testing/{user_name}")
 
 
 def calc_complexity(path):
@@ -226,10 +211,3 @@ def get_average(dataframe, path):
         print(f"{user_name}/{repo_name} has been added to DB...... Updated Queue Size : {len(queue.queue)} ")
     else:
         print(f"Cannot fetch any files from {user_name}/{repo_name}..... Updated Queue Size : {len(queue.queue)}")
-
-
-if __name__ == "__main__":
-    time_start = time.time()
-    goes_through(1)
-    time_end = time.time()
-    print(time_end - time_start)
