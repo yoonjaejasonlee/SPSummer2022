@@ -6,9 +6,6 @@ import os
 import ast
 import astor
 import sqlalchemy.engine
-import requests
-import shutil
-import time
 import pymysql
 from git.repo.base import Repo
 from datetime import datetime
@@ -74,12 +71,12 @@ engine = sqlalchemy.create_engine(URL, echo=False)
 def queuing(lists):
     for s in lists:
         queue.enqueue(s)
-        print("Queue Size: ", len(queue.queue))
-    else:
-        print("nothing to queue")
+
+    print("Queue Size: ", len(queue.queue))
     goes_through()
 
 # -----------------Analyze----------------------------------
+
 
 def parse_imports(text):
     temp = []
@@ -141,7 +138,7 @@ def goes_through():
         Repo.clone_from(url, temp_location)
         df = calc_complexity(temp_location)
         get_average(df, url)
-        #shutil.rmtree(f"C:/Users/yoonj/Desktop/project-3-s22-yoonjaejasonlee-main/testing/{user_name}")
+        #shutil.rmtree(f"C:/Users/yoonj/Desktop/project-3-s22-yoonjaejasonlee-main/testing/{user_name}")  <- enable when sent to server
 
 
 def calc_complexity(path):
@@ -189,14 +186,13 @@ def get_average(dataframe, path):
         columns=["Time", "URL", "User_name", "Repo_name", "Total_File_Num", "Avg_Mutual_CNT", "Avg_nloc", "Total_LOC",
                  "Avg_CCN",
                  "Max_CCN",
-                 "Min_CCN", "Avg_func_token", "Max_indent", "Max_func_param", "Max_call_cnt"]
+                 "Avg_func_token", "Max_indent", "Max_func_param", "Max_call_cnt"]
     )
-    avg_mutual = dataframe['m_mutual_cnt'].mean()
+    avg_mutual = dataframe['m_mutual_cnt'].max()
     avg_nloc = dataframe['nloc'].mean()
     total_loc = dataframe['loc'].sum()
     avg_ccn = dataframe['CCN'].mean()
     max_ccn = dataframe['CCN'].max()
-    min_ccn = dataframe['CCN'].min()
     max_indent = dataframe['max_indent'].max()
     max_param = dataframe['func_param'].max()
     avg_token = dataframe['func_token'].mean()
@@ -204,7 +200,7 @@ def get_average(dataframe, path):
     row_num = dataframe.shape[0]
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     df2.loc[len(df2)] = [timestamp, path, user_name, repo_name, row_num, avg_mutual, avg_nloc, total_loc, avg_ccn,
-                         max_ccn, min_ccn,
+                         max_ccn,
                          avg_token, max_indent, max_param, max_call_cnt]
     if total_loc != 0:
         df2.to_sql(name='complexities', con=engine, if_exists='append', index=False)
