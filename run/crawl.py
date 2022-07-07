@@ -34,7 +34,7 @@ def crawling(url):
     total = tot_repos["total_count"]
     print('Total count of repos:', total)
     global total_list
-
+    final_list = []
     i = 1
     while i <= (total / 100) + 1:
 
@@ -45,7 +45,7 @@ def crawling(url):
             repos.get('items', 'error')
             repos = res.json()
             month_list = ([i['html_url'] for i in repos['items']])
-            final_list = []
+            #final_list = []
             for _ in repos['items']:
                 try:
                     for res_data in month_list:
@@ -59,12 +59,13 @@ def crawling(url):
                     print("error")
             i = i + 1
             month_list.clear()
-            urls = "http://127.0.0.1:5000/repos"
-            headers = {'Content-type': 'application/json', 'Accept': 'text/plain'}
-            requests.post(urls, json=json.dumps(final_list), headers=headers)
+    urls = "http://sparrow-ml.fasoo.com:24444/repos"
+    headers = {'Content-type': 'application/json', 'Accept': 'text/plain'}
+    requests.post(urls, json=json.dumps(final_list), headers=headers)
+    final_list.clear()
 
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1",
-            port=4999,
+    app.run(host="sparrow-ml.fasoo.com",
+            port=24999,
             debug=True)

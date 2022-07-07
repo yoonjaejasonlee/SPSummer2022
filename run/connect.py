@@ -3,7 +3,6 @@ from flask import Flask
 from flask import request
 import json
 import analyze
-
 app = Flask(__name__)
 
 
@@ -16,8 +15,12 @@ def test():
     content = request.json
     contents = json.loads(content)
     analyze.queuing(contents)
+
     return ""
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+
+    app.run(host="sparrow-ml.fasoo.com",
+            port=24444,
+            debug=True)

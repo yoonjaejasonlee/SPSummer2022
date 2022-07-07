@@ -7,6 +7,7 @@ import ast
 import astor
 import sqlalchemy.engine
 import pymysql
+import shutil
 from git.repo.base import Repo
 from datetime import datetime
 
@@ -61,8 +62,6 @@ class Queue:
 
 
 # --------------------------------------------------------------------
-
-
 queue = Queue()
 URL = 'mysql+mysqlconnector://root:a1234567!@sparrow-ml.fasoo.com:30198/Analyzer'
 engine = sqlalchemy.create_engine(URL, echo=False)
@@ -74,7 +73,6 @@ def queuing(lists):
 
     print("Queue Size: ", len(queue.queue))
     goes_through()
-
 # -----------------Analyze----------------------------------
 
 
@@ -134,11 +132,11 @@ def goes_through():
         user_name = url.rsplit('/', 2)[1]
         repo_name = url.rsplit('/', 1)[-1]
 
-        temp_location = f"C:/Users/yoonj/Desktop/project-3-s22-yoonjaejasonlee-main/testing/{user_name}/{repo_name}/"
+        temp_location = f"testing/{user_name}/{repo_name}/"
         Repo.clone_from(url, temp_location)
         df = calc_complexity(temp_location)
         get_average(df, url)
-        #shutil.rmtree(f"C:/Users/yoonj/Desktop/project-3-s22-yoonjaejasonlee-main/testing/{user_name}")  <- enable when sent to server
+        shutil.rmtree(f"testing/{user_name}")
 
 
 def calc_complexity(path):
@@ -183,27 +181,30 @@ def get_average(dataframe, path):
     user_name = path.rsplit('/', 2)[1]
     repo_name = path.rsplit('/', 1)[-1]
     df2 = pd.DataFrame(
-        columns=["Time", "URL", "User_name", "Repo_name", "Total_File_Num", "Avg_Mutual_CNT", "Avg_nloc", "Total_LOC",
+        columns=["Time", "URL", "User_name", "Repo_name", "Total_File_Num", "Max_Mutual_CNT", "Avg_nloc", "Total_LOC",
                  "Avg_CCN",
                  "Max_CCN",
-                 "Avg_func_token", "Max_indent", "Max_func_param", "Max_call_cnt"]
+                 "Avg_func_token", "Max_indent","Avg_indent", "Max_func_param", "Avg_func_param", "Max_call_cnt", "Avg_call_cnt", "Process_Usage", "Process_Time"]
     )
-    avg_mutual = dataframe['m_mutual_cnt'].max()
+    max_mutual = dataframe['m_mutual_cnt'].max()
     avg_nloc = dataframe['nloc'].mean()
     total_loc = dataframe['loc'].sum()
     avg_ccn = dataframe['CCN'].mean()
     max_ccn = dataframe['CCN'].max()
     max_indent = dataframe['max_indent'].max()
+    avg_indent = dataframe['max_indent'].mean()
     max_param = dataframe['func_param'].max()
+    avg_param = dataframe['func_param'].mean()
     avg_token = dataframe['func_token'].mean()
     max_call_cnt = dataframe['call_cnt'].max()
+    avg_call_cnt = dataframe['call_cnt'].mean()
     row_num = dataframe.shape[0]
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    df2.loc[len(df2)] = [timestamp, path, user_name, repo_name, row_num, avg_mutual, avg_nloc, total_loc, avg_ccn,
+    df2.loc[len(df2)] = [timestamp, path, user_name, repo_name, row_num, max_mutual, avg_nloc, total_loc, avg_ccn,
                          max_ccn,
-                         avg_token, max_indent, max_param, max_call_cnt]
+                         avg_token, max_indent, avg_indent, max_param, avg_param, max_call_cnt, avg_call_cnt, None, None]
     if total_loc != 0:
-        df2.to_sql(name='complexities', con=engine, if_exists='append', index=False)
+        df2.to_sql(name='test', con=engine, if_exists='append', index=False)
         print(f"{user_name}/{repo_name} has been added to DB...... Updated Queue Size : {len(queue.queue)} ")
     else:
         print(f"Cannot fetch any files from {user_name}/{repo_name}..... Updated Queue Size : {len(queue.queue)}")
